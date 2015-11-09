@@ -1,0 +1,56 @@
+TODO:
+
+DONE:
+
+For those objects where the init method expands the number of vertices,
+the control/setter methods need to be modified correspondingly. -- DONE
+
+Vertexsetter needs to be finished and tested.  Done.
+
+Resizing isn't quite working:  canvas width and height need to be
+in pixels.  Put the canvas in a div and it should work. Done.
+
+Get reuse working. DONE.
+
+Make resizing less sensitive to scrolling. DONE
+
+Support play3d() for widget.  This could be done like the
+sliders in Shiny:  attach the player to the slider, or we could
+have an invisible player object which is controlled by buttons,
+and which optionally controls a slider. DONE using playControl.
+
+playControl should generate a widget, not be a controller. DONE
+
+Drop rglcontroller widget, have playwidget work with Shiny. Partially
+DONE: playwidget works with Shiny, but rglcontroller has been kept,
+because it doesn't really make sense to use playwidget.
+
+Set it up so that rgl Suggests rglwidget, all the WebGL work is done
+here.  Functions remain in rgl, but they check whether they can
+requireNamespace(rglwidgets), and give instructions if not.  DONE
+here, not committed in rgl yet.
+
+
+NOT DONE:
+
+On Windows, the 3d sprites flash annoyingly.  This might be caused by the mouse
+events being called while still being serviced.  (Doesn't appear to be.  Not sure
+of the cause...)
+
+Other browsers need to be tested. Done on OSX.
+
+Get rmarkdown to do the base64 conversion of embedded images
+instead of doing it ourselves; make sure files get cleaned up.
+
+Put bboxdeco rendering into Javascript.  -- looks really time
+consuming.
+
+Investigate whether grid displays can be converted to rgl objects.
+
+Add class to rgl function results so that in RStudio they can automatically
+be made into widgets.
+
+Do away with subst(), use tags.  Can't completely do away with it,
+we need to write Javascript sometimes, but we can make less use of it.
+
+Style the controls using CSS, not Javascript.

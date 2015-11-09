@@ -1,0 +1,58 @@
+\name{webGLcontrols}
+\alias{subsetControl}
+\alias{propertyControl}
+\title{
+Controls to use with rglcontroller.
+}
+\description{
+These are setter functions to produce actions in a Shiny app,
+or in an animation.
+}
+\usage{
+subsetControl(value, subsets, subscenes = NULL,
+                         fullset = Reduce(union, subsets),
+                         accumulate = FALSE)
+propertyControl(value, entries, properties, objids, values = NULL,
+                param = seq_len(NROW(values)), interp = TRUE)
+}
+\arguments{
+  \item{value}{The value to use for input (typically \code{input$value}
+  in a Shiny app.}
+  \item{subsets}{A list of vectors of object identifiers; the value will
+  choose among them.}
+  \item{fullset}{Objects in the subscene which are not in \code{fullset}
+  will not be touched.}
+  \item{subscenes}{The subscenes to be controlled.  If \code{NULL}, the
+  root subscene.}
+  \item{accumulate}{If \code{TRUE}, the subsets will accumulate (by union)
+  as the value increases.}
+  \item{entries, properties, objids}{Which properties to set.}
+  \item{values}{Values to set.}
+  \item{param}{Parameter values corresponding to the rows of \code{value}}
+  \item{interp}{Whether to use linear interpolation between \code{param}
+  values}
+}
+\details{
+\code{subsetControl} produces data for \code{\link{rglcontroller}} to
+display subsets of the object in one or more subscenes.  This code will not
+touch objects in the
+subscenes if they
+are not in \code{fullset}.  \code{fullset} defaults to the union of
+all the object ids mentioned in \code{subsets}, so by default if an id is
+not mentioned in one of the subsets, it will not be controlled by the slider.
+
+\code{propertyControl} sets individual properties.
+}
+\value{
+These functions return controller data in a list.
+}
+\author{
+Duncan Murdoch
+}
+
+\seealso{
+\code{\link{rglcontroller}} for how to embed this in a Shiny app,
+\code{\link[rgl]{subsetSetter}} for a way to embed a pure Javascript
+control, and \code{\link{playwidget}} for a way to use these
+in animations.
+}
