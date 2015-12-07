@@ -22,8 +22,12 @@ rglwidgetClass = function() {
     };
 
     this.vlen = function(v) {
-		  return Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+		  return Math.sqrt(this.dotprod(v, v));
 		};
+
+    this.dotprod = function(a, b) {
+      return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+    }
 
 		this.xprod = function(a, b) {
 			return [a[1]*b[2] - a[2]*b[1],
@@ -37,8 +41,26 @@ rglwidgetClass = function() {
       });
     };
 
+    this.swap = function(a, i, j) {
+      var temp = a[i];
+      a[i] = a[j];
+      a[j] = temp;
+    };
+
     this.flatten = function(a) {
       return [].concat.apply([], a);
+    };
+
+    /* set element of 1d or 2d array as if it was flattened.  Column major, zero based! */
+    this.setElement = function(a, i, value) {
+      if (Array.isArray(a[0])) {
+        var dim = a.length,
+            col = Math.floor(i/dim),
+            row = i % dim;
+        a[row][col] = value;
+      } else {
+        a[i] = value;
+      }
     };
 
     this.transpose = function(a) {
@@ -84,7 +106,7 @@ rglwidgetClass = function() {
 
     this.componentProduct = function(x, y) {
       if (typeof y === "undefined") {
-        alert("Bad arg to componentProduct");
+        this.alertOnce("Bad arg to componentProduct");
       }
       var result = new Float32Array(3), i;
       for (i = 0; i<3; i++)
@@ -112,6 +134,13 @@ rglwidgetClass = function() {
 	    while (arr.length < len/2)
 	      arr = arr.concat(arr);
 	    return arr.concat(arr.slice(0, len - arr.length));
+	  };
+
+	  this.alertOnce = function(msg) {
+	    if (typeof this.alerted !== "undefined")
+	      return;
+	    this.alerted = true;
+	    alert(msg);
 	  };
 
     this.f_is_lit = 1;
@@ -143,7 +172,7 @@ rglwidgetClass = function() {
 
     this.getObj = function(id) {
       if (typeof id !== "number") {
-		    alert("getObj id is "+typeof id);
+		    this.alertOnce("getObj id is "+typeof id);
       }
       return this.scene.objects[id];
     };
@@ -241,7 +270,8 @@ rglwidgetClass = function() {
 		      fixed_quads = flags & this.f_fixed_quads,
 		      sprites_3d = flags & this.f_sprites_3d,
 		      sprite_3d = flags & this.f_sprite_3d,
-		      nclipplanes = this.countClipplanes();
+		      nclipplanes = this.countClipplanes(),
+		      result;
 
 		  if (type === "clipplanes" || sprites_3d) return;
 
@@ -322,7 +352,8 @@ rglwidgetClass = function() {
 		      fixed_quads = flags & this.f_fixed_quads,
 		      sprites_3d = flags & this.f_sprites_3d,
 		      nclipplanes = this.countClipplanes(), i,
-          texture_format, nlights;
+          texture_format, nlights,
+          result;
 
 		  if (type === "clipplanes" || sprites_3d) return;
 
@@ -676,7 +707,6 @@ rglwidgetClass = function() {
       sub.clipplanes = [];
       sub.transparent = [];
       sub.opaque = [];
-      sub.clipplanes = [];
       sub.lights = [];
       for (i=0; i < sub.objects.length; i++) {
         obj = this.getObj(sub.objects[i]);
@@ -712,6 +742,81 @@ rglwidgetClass = function() {
       }
     };
 
+    this.planeUpdateTriangles = function(id, bbox) {
+      var perms = [[0,0,1], [1,2,2], [2,1,0]],
+          x, xrow, elem, A, d, nhits, i, j, k, u, v, w, intersect, which, v0, v2, vx, reverse,
+          face1 = [], face2 = [], normals = [],
+          obj = this.getObj(id),
+          nPlanes = obj.normals.length;
+      obj.bbox = bbox;
+      obj.vertices = [];
+      obj.initialized = false;
+      for (elem = 0; elem < nPlanes; elem++) {
+//    Vertex Av = normal.getRecycled(elem);
+        x = [];
+        A = obj.normals[elem];
+        d = obj.offsets[elem][0];
+        nhits = 0;
+        for (i=0; i<3; i++)
+          for (j=0; j<2; j++)
+            for (k=0; k<2; k++) {
+              u = perms[0][i];
+              v = perms[1][i];
+              w = perms[2][i];
+              if (A[w] != 0.0) {
+                intersect = -(d + A[u]*bbox[j+2*u] + A[v]*bbox[k+2*v])/A[w];
+  	            if (bbox[2*w] < intersect && intersect < bbox[1+2*w]) {
+  	              xrow = [];
+  	              xrow[u] = bbox[j+2*u];
+  	              xrow[v] = bbox[k+2*v];
+  	              xrow[w] = intersect;
+  	              x.push(xrow);
+  	              face1[nhits] = j + 2*u;
+  	              face2[nhits] = k + 2*v;
+  	              nhits++;
+  	            }
+  	          }
+            }
+
+            if (nhits > 3) {
+            /* Re-order the intersections so the triangles work */
+              for (i=0; i<nhits-2; i++) {
+                which = 0; /* initialize to suppress warning */
+                for (j=i+1; j<nhits; j++) {
+                  if (face1[i] == face1[j] || face1[i] == face2[j]
+                      || face2[i] == face1[j] || face2[i] == face2[j] ) {
+                    which = j;
+                    break;
+                  }
+                }
+                if (which > i+1) {
+                  this.swap(x, i+1, which);
+                  this.swap(face1, i+1, which);
+                  this.swap(face2, i+1, which);
+                }
+              }
+            }
+            if (nhits >= 3) {
+      /* Put in order so that the normal points out the FRONT of the faces */
+              v0 = [x[0][0] - x[1][0] , x[0][1] - x[1][1], x[0][2] - x[1][2]];
+              v2 = [x[2][0] - x[1][0] , x[2][1] - x[1][1], x[2][2] - x[1][2]];
+              /* cross-product */
+              vx = this.xprod(v0, v2);
+              reverse = this.dotprod(vx, A) > 0;
+
+              for (i=0; i<nhits-2; i++) {
+                obj.vertices.push(x[0]);
+                normals.push(A);
+                for (j=1; j<3; j++) {
+                  obj.vertices.push(x[i + (reverse ? 3-j : j)]);
+                  normals.push(A);
+                }
+              }
+            }
+      }
+      obj.pnormals = normals;
+    };
+
     this.initObj = function(id) {
 	    var obj = this.getObj(id),
 	        flags = obj.flags,
@@ -728,8 +833,10 @@ rglwidgetClass = function() {
           i,j,v, mat, uri, matobj;
 
     if (typeof id !== "number") {
-      alert("initObj id is "+typeof id);
+      this.alertOnce("initObj id is "+typeof id);
     }
+
+    obj.initialized = true;
 
     if (type === "background" || type === "bboxdeco" || type === "subscene")
       return;
@@ -814,6 +921,7 @@ rglwidgetClass = function() {
 
     v = obj.vertices;
     obj.vertexCount = v.length;
+    if (!obj.vertexCount) return;
 
     var stride = 3, nc, cofs, nofs, radofs, oofs, tofs, vnew, v1;
 
@@ -830,7 +938,7 @@ rglwidgetClass = function() {
     if (typeof obj.normals !== "undefined") {
     	nofs = stride;
     	stride = stride + 3;
-    	v = this.cbind(v, obj.normals);
+    	v = this.cbind(v, typeof obj.pnormals !== "undefined" ? obj.pnormals : obj.normals);
     } else
     	nofs = -1;
 
@@ -896,10 +1004,10 @@ rglwidgetClass = function() {
     }
 
     if (stride !== v[0].length) {
-      alert("problem in stride calculation");
+      this.alertOnce("problem in stride calculation");
     }
 
-    obj.offsets = {vofs:0, cofs:cofs, nofs:nofs, radofs:radofs, oofs:oofs, tofs:tofs, stride:stride};
+    obj.vOffsets = {vofs:0, cofs:cofs, nofs:nofs, radofs:radofs, oofs:oofs, tofs:tofs, stride:stride};
 
     obj.values = new Float32Array(this.flatten(v));
 
@@ -1023,6 +1131,20 @@ rglwidgetClass = function() {
 		}
   };
 
+    this.setDepthTest = function(id) {
+      var gl = this.gl,
+          tests = {never: gl.NEVER,
+                   less:  gl.LESS,
+                   equal: gl.EQUAL,
+                   lequal:gl.LEQUAL,
+                   greater: gl.GREATER,
+                   notequal: gl.NOTEQUAL,
+                   gequal: gl.GEQUAL,
+                   always: gl.ALWAYS},
+           test = tests[this.getMaterial(id, "depth_test")];
+      gl.depthFunc(test);
+    };
+
 	  this.mode4type = {points : "POINTS",
 							       linestrip : "LINE_STRIP",
 							       abclines : "LINES",
@@ -1052,8 +1174,17 @@ rglwidgetClass = function() {
 		      faces;
 
 		  if (typeof id !== "number") {
-		    alert("drawObj id is "+typeof id);
+		    this.alertOnce("drawObj id is "+typeof id);
 		  }
+
+			if (type === "planes") {
+			  if (obj.bbox !== subscene.par3d.bbox || !obj.initialized) {
+			    this.planeUpdateTriangles(id, subscene.par3d.bbox);
+			  }
+			}
+
+      if (!obj.initialized)
+        this.initObj(id);
 
       if (type === "light" || type === "bboxdeco")
         return;
@@ -1067,6 +1198,8 @@ rglwidgetClass = function() {
  			  obj.IMVClip = IMVClip;
         return;
 			}
+
+      this.setDepthTest(id);
 
       if (sprites_3d) {
 			  var norigs = obj.vertices.length,
@@ -1207,12 +1340,12 @@ rglwidgetClass = function() {
 			    sphereMV = new CanvasMatrix4();
 
 			  	if (depth_sort) {
-				    baseofs = faces[i]*obj.offsets.stride;
+				    baseofs = faces[i]*obj.vOffsets.stride;
 				  } else {
-				    baseofs = i*obj.offsets.stride;
+				    baseofs = i*obj.vOffsets.stride;
 				  }
 
-          ofs = baseofs + obj.offsets.radofs;
+          ofs = baseofs + obj.vOffsets.radofs;
 				  sscale = obj.values[ofs];
 
 				  sphereMV.scale(sscale/scale[0], sscale/scale[1], sscale/scale[2]);
@@ -1223,7 +1356,7 @@ rglwidgetClass = function() {
 				  gl.uniformMatrix4fv( obj.mvMatLoc, false, new Float32Array(sphereMV.getAsArray()) );
 
 				  if (nc > 1) {
-				    ofs = baseofs + obj.offsets.cofs;
+				    ofs = baseofs + obj.vOffsets.cofs;
 					  gl.vertexAttrib4f( this.colLoc, obj.values[ofs],
 					   		                       obj.values[ofs+1],
                                        obj.values[ofs+2],
@@ -1239,18 +1372,18 @@ rglwidgetClass = function() {
 				  gl.vertexAttrib4fv( this.colLoc, new Float32Array(obj.onecolor));
 				} else {
 					gl.enableVertexAttribArray( this.colLoc );
-					gl.vertexAttribPointer(this.colLoc, 4, gl.FLOAT, false, 4*obj.offsets.stride, 4*obj.offsets.cofs);
+					gl.vertexAttribPointer(this.colLoc, 4, gl.FLOAT, false, 4*obj.vOffsets.stride, 4*obj.vOffsets.cofs);
 				}
       }
 
-			if (is_lit && obj.offsets.nofs > 0) {
+			if (is_lit && obj.vOffsets.nofs > 0) {
 				gl.enableVertexAttribArray( obj.normLoc );
-				gl.vertexAttribPointer(obj.normLoc, 3, gl.FLOAT, false, 4*obj.offsets.stride, 4*obj.offsets.nofs);
+				gl.vertexAttribPointer(obj.normLoc, 3, gl.FLOAT, false, 4*obj.vOffsets.stride, 4*obj.vOffsets.nofs);
 			}
 
 			if (has_texture || type === "text") {
 				gl.enableVertexAttribArray( obj.texLoc );
-				gl.vertexAttribPointer(obj.texLoc, 2, gl.FLOAT, false, 4*obj.offsets.stride, 4*obj.offsets.tofs);
+				gl.vertexAttribPointer(obj.texLoc, 2, gl.FLOAT, false, 4*obj.vOffsets.stride, 4*obj.vOffsets.tofs);
 				gl.activeTexture(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, obj.texture);
 				gl.uniform1i( obj.sampler, 0);
@@ -1258,7 +1391,7 @@ rglwidgetClass = function() {
 
 			if (fixed_quads) {
 				gl.enableVertexAttribArray( obj.ofsLoc );
-				gl.vertexAttribPointer(obj.ofsLoc, 2, gl.FLOAT, false, 4*obj.offsets.stride, 4*obj.offsets.oofs);
+				gl.vertexAttribPointer(obj.ofsLoc, 2, gl.FLOAT, false, 4*obj.vOffsets.stride, 4*obj.vOffsets.oofs);
 			}
 
 			var mode = this.mode4type[type];
@@ -1273,7 +1406,7 @@ rglwidgetClass = function() {
 				gl.lineWidth( this.getMaterial(id, "lwd") );
 			}
 
-			gl.vertexAttribPointer(this.posLoc,  3, gl.FLOAT, false, 4*obj.offsets.stride,  4*obj.offsets.vofs);
+			gl.vertexAttribPointer(this.posLoc,  3, gl.FLOAT, false, 4*obj.vOffsets.stride,  4*obj.vOffsets.vofs);
 
 			if (is_indexed) {
 			  gl.drawElements(gl[mode], count, gl.UNSIGNED_SHORT, 0);
@@ -1294,9 +1427,11 @@ rglwidgetClass = function() {
         return;
 		  for (i=0; i < subids.length; i++) {
 		    flags = objects[subids[i]].flags;
-		    subscene_has_faces |= (flags & this.f_is_lit)
+		    if (typeof flags !== "undefined") {
+		      subscene_has_faces |= (flags & this.f_is_lit)
 		                       & !(flags & this.f_fixed_quads);
-		    subscene_needs_sorting |= (flags & this.f_depth_sort);
+		      subscene_needs_sorting |= (flags & this.f_depth_sort);
+		    }
 		  }
 
 		  var bgid = obj.backgroundId,
@@ -1332,9 +1467,12 @@ rglwidgetClass = function() {
 				    this.drawObj(clipids[i], subsceneid);
 				}
 				subids = obj.opaque;
-				gl.depthMask(true);
-				for (i = 0; subids && i < subids.length; i++) {
-				  this.drawObj(subids[i], subsceneid);
+				if (subids.length > 0) {
+				  gl.depthMask(true);
+				  gl.disable(gl.BLEND);
+				  for (i = 0; subids && i < subids.length; i++) {
+				    this.drawObj(subids[i], subsceneid);
+				  }
 				}
 				subids = obj.transparent;
 				if (subids.length > 0) {
@@ -1673,6 +1811,8 @@ rglwidgetClass = function() {
 		  this.resize(el);
 		  el.appendChild(this.canvas);
 		  this.initGL0();
+		  if (!this.gl)
+		    return;
 	    var objs = this.scene.objects,
 	        self = this;
 	    this.sphere = this.initSphere(this.scene.sphereVerts);
@@ -1699,7 +1839,8 @@ rglwidgetClass = function() {
 		    this.debugelement = document.getElementById(this.prefix + "debug");
 	      this.debug("");
 		  }
-		  this.drawInstance();
+		  this.drag = 0;
+		  this.drawScene();
 		};
 
 		this.debug = function(msg, img) {
@@ -1724,7 +1865,7 @@ rglwidgetClass = function() {
 
     this.initGL0 = function() {
 	    if (!window.WebGLRenderingContext){
-	      debug("Your browser does not support WebGL. See <a href=\"http://get.webgl.org\">http://get.webgl.org</a>", this.getSnapshot());
+	      this.debug("Your browser does not support WebGL. See <a href=\"http://get.webgl.org\">http://get.webgl.org</a>", this.getSnapshot());
 	      return;
 	    }
 	    try {
@@ -1732,7 +1873,7 @@ rglwidgetClass = function() {
 	    }
 	    catch(e) {}
 	    if ( !this.gl ) {
-	      debug("Your browser appears to support WebGL, but did not create a WebGL context.  See <a href=\"http://get.webgl.org\">http://get.webgl.org</a>",
+	      this.debug("Your browser appears to support WebGL, but did not create a WebGL context.  See <a href=\"http://get.webgl.org\">http://get.webgl.org</a>",
 	            this.getSnapshot());
 	      return;
 	    }
@@ -1741,8 +1882,6 @@ rglwidgetClass = function() {
     this.initGL = function() {
 	   this.gl = this.canvas.getContext("webgl") ||
 	               this.canvas.getContext("experimental-webgl");
-	   if (debug)
-	     this.gl = WebGLDebugUtils.makeDebugContext(this.gl, throwOnGLError, logAndValidate);
 	 };
 
     this.resize = function(el) {
@@ -1750,21 +1889,17 @@ rglwidgetClass = function() {
       this.canvas.height = el.height;
     };
 
-		this.drawInstance = function() {
-	    var gl = this.gl;
-		  gl.enable(gl.DEPTH_TEST);
+    this.drawScene = function() {
+      var gl = this.gl;
+      if (!gl)
+        this.alertOnce("No WebGL context.");
+      gl.enable(gl.DEPTH_TEST);
 	    gl.depthFunc(gl.LEQUAL);
 	    gl.clearDepth(1.0);
 	    gl.clearColor(1,1,1,1);
-	    this.drag  = 0;
-      this.drawScene();
-		};
-
-    this.drawScene = function() {
-      var gl = this.gl;
-			gl.disable(gl.BLEND);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 			this.drawSubscene(this.scene.rootSubscene);
-			gl.flush();
+			this.drawing = false;
 		};
 
 		this.subsetSetter = function(el, control) {
@@ -1784,7 +1919,7 @@ rglwidgetClass = function() {
       for (i=0; i < subscenes.length; i++) {
         subsceneid = subscenes[i];
         if (typeof this.getObj(subsceneid) === "undefined")
-          alert("typeof object is undefined");
+          this.alertOnce("typeof object is undefined");
         entries = this.getObj(subsceneid).objects;
         entries = entries.filter(ismissing);
         if (control.accumulate) {
@@ -1811,6 +1946,7 @@ rglwidgetClass = function() {
 		      property = properties[0], objid = objids[0],
 		      obj = this.getObj(objid),
 		      propvals, i, v1, v2, p, entry, gl, needsBinding,
+		      newprop, newid,
 
 		      getPropvals = function() {
             if (property === "userMatrix")
@@ -1855,11 +1991,11 @@ rglwidgetClass = function() {
         if (control.interp) {
           v1 = values[ncol*(i-1) + j];
           v2 = values[ncol*i + j];
-          propvals[entry] = p*v1 + (1-p)*v2;
+          this.setElement(propvals, entry, p*v1 + (1-p)*v2);
         } else if (!direct) {
-          propvals[entry] = values[ncol*value + j];
+          this.setElement(propvals, entry, values[ncol*value + j]);
         } else {
-          propvals[entry] = value[j];
+          this.setElement(propvals, entry, value[j]);
         }
       }
       needsBinding = [];
@@ -1936,11 +2072,11 @@ rglwidgetClass = function() {
       for (k=0; k<ncol; k++) {
         attrib = attributes[k];
         vertex = vertices[k];
-        ofs = obj.offsets[ofss[attrib]];
+        ofs = obj.vOffsets[ofss[attrib]];
         if (ofs < 0)
-          alert("Attribute '"+attrib+"' not found in object "+control.objid);
+          this.alertOnce("Attribute '"+attrib+"' not found in object "+control.objid);
         else {
-          stride = obj.offsets.stride;
+          stride = obj.vOffsets.stride;
           ofs = vertex*stride + ofs + pos[attrib];
           if (direct) {
             propvals[ofs] = value;
@@ -2005,11 +2141,11 @@ rglwidgetClass = function() {
         objid = objids[l];
         obj = this.getObj(objid);
         propvals = obj.values;
-        stride = obj.offsets.stride;
+        stride = obj.vOffsets.stride;
         for (k = 0; k < attribs.length; k++) {
           attrib = control[attribs[k]];
           if (typeof attrib !== "undefined") {
-            ofs = obj.offsets[ofss[k]];
+            ofs = obj.vOffsets[ofss[k]];
             if (ofs >= 0) {
               dim = dims[k];
               ofs = ofs + pos[k];
@@ -2021,7 +2157,7 @@ rglwidgetClass = function() {
                 }
               }
             } else
-              alert("\'"+attribs[k]+"\' property not found in object "+objid);
+              this.alertOnce("\'"+attribs[k]+"\' property not found in object "+objid);
           }
         }
         obj.values = propvals;
@@ -2041,7 +2177,7 @@ rglwidgetClass = function() {
       window[control.prefix + "rgl"] = this;
 		};
 
-		this.player = function(el, control) {
+		this.Player = function(el, control) {
 		  var
 		    self = this,
 		    components = [].concat(control.components),
@@ -2051,20 +2187,24 @@ rglwidgetClass = function() {
 		          nominal = this.value,
 		          slider = this.Slider,
 		      	  labels = this.outputLabels,
-		          output = this.Output;
+		          output = this.Output,
+		          step;
 		      if (typeof slider !== "undefined" && nominal != slider.value)
 		        slider.value = nominal;
 		      if (typeof output !== "undefined") {
+		        step = Math.round((nominal - output.sliderMin)/output.sliderStep);
 		        if (labels !== null) {
-		          output.innerHTML = labels[Math.round((nominal - output.sliderMin)/output.sliderStep)];
+		          output.innerHTML = labels[step];
 		        } else {
-		          output.innerHTML = nominal.toPrecision(output.outputPrecision);
+		          step = step*output.sliderStep + output.sliderMin;
+		          output.innerHTML = step.toPrecision(output.outputPrecision);
 		        }
 		      }
 		      for (i=0; i < this.actions.length; i++) {
 		        this.actions[i].value = nominal;
 		      }
-		      self.applyControls(el, this.actions);
+		      self.applyControls(el, this.actions, false);
+		      self.drawScene();
 		    },
 
         OnSliderInput = function() { /* "this" will be the slider */
@@ -2082,8 +2222,8 @@ rglwidgetClass = function() {
 		      slider.oninput = OnSliderInput;
 		      slider.sliderActions = control.actions;
 		      slider.sliderScene = this;
-		      slider.style.display = "inline";
-		      slider.style.width = control.width;
+		      slider.className = "rgl-slider";
+		      slider.id = el.id + "-slider";
 		      el.rgltimer.Slider = slider;
 		      slider.rgltimer = el.rgltimer;
 		      el.appendChild(slider);
@@ -2091,12 +2231,11 @@ rglwidgetClass = function() {
 
 		    addLabel = function(labels, min, step, precision) {
 		      var output = document.createElement("output");
-		      output.style.display = "inline";
-		      output.style["padding-left"] = "6px";
-		      output.style["padding-right"] = "6px";
 		      output.sliderMin = min;
 		      output.sliderStep = step;
 		      output.outputPrecision = precision;
+		      output.className = "rgl-label";
+		      output.id = el.id + "-label";
 		      el.rgltimer.Output = output;
 		      el.rgltimer.outputLabels = labels;
 		      el.appendChild(output);
@@ -2116,10 +2255,14 @@ rglwidgetClass = function() {
 		      if (label === "Play")
 		        button.rgltimer.PlayButton = button;
 		      button.onclick = onclicks[label];
-		      button.style.display = "inline-block";
+		      button.className = "rgl-button";
+		      button.id = el.id + "-" + label;
           el.appendChild(button);
 		    };
 
+        if (typeof control.reinit !== "null") {
+          control.actions.reinit = control.reinit;
+        }
 		    el.rgltimer = new rgltimerClass(Tick, control.start, control.interval, control.stop, control.value, control.rate, control.loop, control.actions);
         for (var i=0; i < components.length; i++) {
           switch(components[i]) {
@@ -2134,20 +2277,22 @@ rglwidgetClass = function() {
           }
         }
         el.rgltimer.Tick();
-        el.style.width = "auto";
-        el.style.height = "auto";
 		};
 
-		this.applyControls = function(el, x) {
-		  var self = this;
-	    Object.keys(x).forEach(function(key){
-		    var control = x[key],
-		        type = control.type;
-		    if (typeof type === "undefined")
-		      return;
+		this.applyControls = function(el, x, draw) {
+		  var self = this, reinit = x.reinit, i, obj, control, type;
+		  for (i = 0; i < x.length; i++) {
+		    control = x[i];
+		    type = control.type;
 		    self[type](el, control);
-		  });
-		  self.drawScene();
+		  };
+		  if (typeof reinit !== "undefined" && reinit !== null) {
+		    reinit = [].concat(reinit);
+		    for (i = 0; i < reinit.length; i++)
+		      self.getObj(reinit[i]).initialized = false;
+		  }
+		  if (typeof draw === "undefined" || draw)
+		    self.drawScene();
 		};
 
 		this.sceneChangeHandler = function(message) {

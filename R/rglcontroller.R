@@ -1,59 +1,40 @@
-rglcontroller <- function(sceneId, ..., elementId = NULL, respondTo = NULL) {
 
-  # create widget
-  controls = list(...)
-
-  if (is.null(elementId) && !inShiny())
-    elementId <- paste0("rgl", sample(100000, 1))
-
-  createWidget(
-    name = 'rglcontroller',
-    x = list(sceneId = sceneId, respondTo = respondTo, controls=controls),
-    elementId = elementId,
-    width = 0, height = 0,
-    package = 'rglwidget'
-  )
-}
-
-#' Widget output function for use in Shiny
-#'
-#' @export
-rglcontrollerOutput <- function(outputId, width = '0px', height = '0px'){
-  shinyWidgetOutput(outputId, 'rglcontroller', width, height, package = 'rglwidget')
-}
-
-#' Widget render function for use in Shiny
-#'
-#' @export
-renderRglcontroller <- function(expr, env = parent.frame(), quoted = FALSE) {
-  if (!quoted) { expr <- substitute(expr) } # force quoted
-  shinyRenderWidget(expr, rglwidgetOutput, env, quoted = TRUE)
-}
-
-subsetControl <- function(value, subsets, subscenes = NULL,
+subsetControl <- function(value = 1, subsets, subscenes = NULL,
                          fullset = Reduce(union, subsets),
                          accumulate = FALSE) {
   subsets <- lapply(subsets, as.integer)
   fullset <- as.integer(fullset)
-  list(type = "subsetSetter",
-       value = value,
+  structure(list(type = "subsetSetter",
+       value = value - 1,
        subsets = subsets,
        subscenes = subscenes,
        fullset = fullset,
-       accumulate = accumulate)
+       accumulate = accumulate),
+      class = "rglControl")
 }
 
-propertyControl <- function(value, entries, properties, objids, values = NULL,
-                            param = seq_len(NROW(values)), interp = TRUE) {
+propertyControl <- function(value = 0, entries, properties, objids, values = NULL,
+                            param = seq_len(NROW(values)) - 1, interp = TRUE) {
   objids <- as.integer(objids)
-  list(type = "propertySetter",
+  structure(list(type = "propertySetter",
        value = value,
        values = values,
        entries = entries,
        properties = properties,
        objids = objids,
        param = param,
-       interp = interp)
+       interp = interp),
+      class = "rglControl")
+}
+
+clipplaneControl <- function(a=NULL, b=NULL, c=NULL, d=NULL,
+                            plane = 1, clipplaneids,
+                            ...) {
+  values <- cbind(a = a, b = b, c = c, d = d)
+  col <- which(colnames(values) == letters[1:4]) - 1
+  propertyControl(values = values, entries = 4*(plane-1) + col,
+                  properties = "vClipplane", objids = clipplaneids,
+                  ...)
 }
 
 ageControl <- function(births, ages, objids, value = 0, colors = NULL, alpha = NULL,
@@ -131,11 +112,11 @@ ageControl <- function(births, ages, objids, value = 0, colors = NULL, alpha = N
   if (!is.null(blue))
     result <- c(result, list(blue = blue[rows]))
 
-  result
+  structure(result, class = "rglControl")
 }
 
-vertexControl <- function(values = NULL, vertices = 1, attributes, objid,
-                          param = seq_len(NROW(values)), interp = TRUE) {
+vertexControl <- function(value = 0, values = NULL, vertices = 1, attributes, objid,
+                          param = seq_len(NROW(values)) - 1, interp = TRUE) {
   attributes <- match.arg(attributes,
                           choices = c("x", "y", "z",
                                       "red", "green", "blue", "alpha",
@@ -157,65 +138,15 @@ vertexControl <- function(values = NULL, vertices = 1, attributes, objid,
     values <- rbind(values[1,], values, values[nrow(values),])
   }
 
-  list(type = "vertexSetter",
+  structure(list(type = "vertexSetter",
+       value = value,
        values = values,
        vertices = vertices - 1, # Javascript 0-based indexing
        attributes = attributes,
        objid = as.integer(objid),
-       param = param - 1,       # Javascript 0-based indexing
-       interp = interp)
-}
-
-playwidget <- function(sceneId, ..., start = 0, stop = Inf, interval = 0.05,  rate = 1,
-                       components = c("Reverse", "Play", "Slower", "Faster", "Reset", "Slider", "Label"),
-                       loop = TRUE,
-                       step = 1, labels = seq(from = start, to = stop, by = step),
-                       precision = 3, width = "auto",
-                       elementId = NULL, respondTo = NULL) {
-
-  if (is.null(elementId) && !inShiny())
-    elementId <- paste0("play", sample(100000, 1))
-
-  if (!is.null(respondTo))
-    components <- NULL
-
-  if (length(stop) != 1 || !is.finite(stop)) stop <- NULL
-
-  actions <- list(...)
-  if (!length(components))
-    components <- character()
-  else
-    components <- match.arg(components, several.ok = TRUE)
-
-  if (is.null(stop)) {
-    if ("Slider" %in% components) {
-      warning("Cannot have slider with non-finite limits")
-      components <- setdiff(components, "Slider")
-    }
-    if (!missing(labels) && length(labels))
-      warning("Cannot have labels with non-finite limits")
-    labels <- NULL
-  }
-  control <- list(type = "player",
-       actions = actions,
-       start = start,
-       stop = stop,
-       value = start,
-       interval = interval,
-       rate = rate,
-       components = components,
-       loop = loop,
-       step = step,
-       labels = labels,
-       precision = precision,
-       width = width)
-
-  createWidget(
-    name = 'rglcontroller',
-    x = list(sceneId = sceneId, respondTo = respondTo, controls=list(control)),
-    elementId = elementId,
-    package = 'rglwidget'
-  )
+       param = param,       # Javascript 0-based indexing
+       interp = interp),
+      class = "rglControl")
 }
 
 # This is a bridge to the old system
@@ -228,7 +159,10 @@ playwidget <- function(sceneId, ..., start = 0, stop = Inf, interval = 0.05,  ra
 
 elementId2Prefix <- function(elementId, prefix = elementId) {
   cat(paste0("<script>var ", prefix, "rgl = {};</script>"))
-  rglcontroller(elementId, list(type = "oldBridge", prefix = prefix))
+  playwidget(elementId, structure(list(type = "oldBridge",
+                                       prefix = prefix),
+                                  class = "rglControl"),
+             components = character(0))
 }
 
 # This puts together a custom message for a more extensive change

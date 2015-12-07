@@ -1,8 +1,7 @@
 export(rglwidget, renderRglwidget, rglwidgetOutput,
-       rglcontroller, renderRglcontroller, rglcontrollerOutput,
-       subsetControl, propertyControl, ageControl, vertexControl,
+       playwidget, renderPlaywidget, playwidgetOutput,
+       subsetControl, propertyControl, clipplaneControl, ageControl, vertexControl,
        .ageSetter, .par3dinterpSetter, .propertySetter, .vertexSetter,
-       playwidget,
        .propertySlider, .subsetSetter,
        .writeWebGL, .setupKnitr, .hook_webgl, .hook_rgl,
        elementId2Prefix, registerSceneChange, sceneChange)
@@ -16,7 +15,7 @@ importFrom(rgl, scene3d, points3d, axis3d, box3d, open3d, rgl.set, rgl.close,
            rgl.cur, rgl.snapshot, rgl.postscript,
            snapshot3d, rgl.useNULL, currentSubscene3d)
 
-importFrom(htmlwidgets, createWidget, shinyRenderWidget, shinyWidgetOutput)
+importFrom(htmlwidgets, createWidget, shinyRenderWidget, shinyWidgetOutput, sizingPolicy)
 importFrom(htmltools, includeScript, tags, tagList)
 importFrom(jsonlite, toJSON)
 importFrom(knitr, fig_path, hook_plot_custom, image_uri, knit_hooks, knit_print, opts_knit)

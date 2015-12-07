@@ -17,7 +17,8 @@
     fullset = paste(fullset, collapse=","))
   for (i in seq_len(nsubs))
     result <- c(result, subst(
-'  entries = %prefix%rgl.getSubsceneEntries(%subscene%);
+'  if (typeof %prefix%rgl.getObj === "undefined") return;
+  entries = %prefix%rgl.getObj(%subscene%).objects;
   entries = entries.filter(f);', prefix = prefixes[i], subscene = subscenes[i]),
       if (accumulate)
 '  for (i=0; i<=value; i++)
@@ -119,11 +120,14 @@ clipplaneSlider <- function(a=NULL, b=NULL, c=NULL, d=NULL,
   # previous response, but we don't want to lose it either.
   result <- subst(
 '<script>%prefix%rgl.%id% = function(value){
+  if (typeof %prefix%rgl.drawScene === "undefined")
+    return;
   var busy = (typeof %prefix%rgl.%id%.busy !== "undefined"),
       lvalue, labels;
-  %prefix%rgl.%id%.busy = value;
-  if (busy) return;
-  do {', prefix, id)
+  try {
+    %prefix%rgl.%id%.busy = value;
+    if (busy) return;
+    do {', prefix, id)
   for (i in seq_along(setters)) {
     setter <- setters[[i]]
     if (inherits(setter, "indexedSetter")) {
@@ -131,20 +135,23 @@ clipplaneSlider <- function(a=NULL, b=NULL, c=NULL, d=NULL,
       settername <- attr(setter, "name")
     }
     result <- c(result,
-
       if (!inherits(setter, "indexedSetter")) subst(
-'     (%setter%)(value);', setter)
+'       (%setter%)(value);', setter)
       else subst(
-'     %settername%(value, %index%);', settername, index=index-1))
+'       %settername%(value, %index%);', settername, index=index-1))
   }
   for (p in unique(prefixes))
     result <- c(result, subst(
-'     %prefix%rgl.drawScene();', prefix = p))
+'       %prefix%rgl.drawScene();', prefix = p))
   result <- c(result, subst(
-'     lvalue = Math.round((value - %minS%)/%step%);
-     labels = [%labels%]; %setoutput%
-   } while (%prefix%rgl.%id%.busy !== value);
-   %prefix%rgl.%id%.busy = undefined;
+'       lvalue = Math.round((value - %minS%)/%step%);
+       labels = [%labels%]; %setoutput%
+     } while (%prefix%rgl.%id%.busy !== value);
+  }
+  finally {
+    if (!busy)
+      %prefix%rgl.%id%.busy = undefined;
+  }
 };
 %prefix%rgl.%id%(%init%);</script>
 <input type="range" min="%minS%" max="%maxS%" step="%step%" value="%init%" id="%id%" name="%name%"
@@ -316,7 +323,7 @@ oninput = "%prefix%rgl.%id%(this.valueAsNumber)">%outputfield%',
 
     subst(
 '  propvals = %prefix%rgl.getObj(%objid%).values,
-  stride = %prefix%rgl.getObj(%objid%).offsets.stride;',
+  stride = %prefix%rgl.getObj(%objid%).vOffsets.stride;',
 	prefix, objid),
 
     if (interp) subst(
@@ -335,7 +342,7 @@ oninput = "%prefix%rgl.%id%(this.valueAsNumber)">%outputfield%',
 			  vertexm1 = vertices[j]-1))
     result <- c(result,
       subst(
-'  ofs = %prefix%rgl.getObj(%objid%).offsets.%attribofs%;
+'  ofs = %prefix%rgl.getObj(%objid%).vOffsets.%attribofs%;
   if (ofs < 0)
     alert("Attribute %attribute% not found in object %objid%");',
         prefix, objid, attribofs = attribofs[attributes[j]],
@@ -540,14 +547,14 @@ print.indexedSetter <- function(x, inScript = FALSE, ...) {
     objid <- objids[j]
     result <- c(result, subst(
 '    propvals = %prefix%rgl.getObj(%objid%).values;
-    stride = %prefix%rgl.getObj(%objid%).offsets.stride;',
+    stride = %prefix%rgl.getObj(%objid%).vOffsets.stride;',
       prefix, objid))
     for (a in attribs) {
       ofs <- c(colors = "cofs", alpha = "cofs", radii = "radofs",
       	       vertices = "vofs", normals = "nofs", origins = "oofs",
       	       texcoords = "tofs")[a]
       result <- c(result, subst(
-'    ofs = %prefix%rgl.getObj(%objid%).offsets.%ofs%;
+'    ofs = %prefix%rgl.getObj(%objid%).vOffsets.%ofs%;
     if (ofs >= 0) {
       for (i = 0; i < births.length; i++) {',
         prefix, objid, ofs))

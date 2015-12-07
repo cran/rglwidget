@@ -20,7 +20,7 @@ An \pkg{rgl} scene produced by the \code{\link[rgl]{scene3d}} function.
   \item{width, height}{
 The width and height of the display in pixels.
 }
-  \item{controllers}{Names of \code{\link{rglcontroller}} objects
+  \item{controllers}{Names of \code{\link{playwidget}} objects
 associated with this scene.  See Details below.
 }
   \item{snapshot}{Control of snapshot of scene.  See
@@ -42,9 +42,9 @@ framework.  This allows display of the scene in an \pkg{rmarkdown} document
 or in a \pkg{shiny} app.
 
 In a \pkg{shiny} app, there will often be one or more
-\code{\link{rglcontroller}} objects in the app, taking input from
+\code{\link{playwidget}} objects in the app, taking input from
 the user.  In order to be sure that the initial value of the user control
-is reflected in the scene, you should list all controllers in the
+is reflected in the scene, you should list all players in the
 \code{controllers} argument.  See the sample application in
 \code{system.file("shinyDemo", package = "rglwidget")} for an example.
 
@@ -75,6 +75,15 @@ and they need not be included in the HTML generated for later scenes.
 This is normally useful only in \pkg{knitr} documents which can have
 many \pkg{rgl} scenes; if the widget is displayed in RStudio,
 only one scene will be shown.
+}
+\section{Appearance}{
+The appearance of the display is set by the stylesheet
+in \code{system.file("htmlwidgets/lib/rglClass/rgl.css")}.
+
+The widget is of class \code{rglWebGL}, with id
+set according to \code{elementId}.  (As of this writing,
+no special settings are given for class \code{rglWebGL},
+but you can add your own.)
 }
 \author{
 Duncan Murdoch

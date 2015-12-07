@@ -21,15 +21,35 @@ and which optionally controls a slider. DONE using playControl.
 
 playControl should generate a widget, not be a controller. DONE
 
-Drop rglcontroller widget, have playwidget work with Shiny. Partially
-DONE: playwidget works with Shiny, but rglcontroller has been kept,
-because it doesn't really make sense to use playwidget.
+Drop rglcontroller widget, have playwidget work with Shiny.
+DONE
 
 Set it up so that rgl Suggests rglwidget, all the WebGL work is done
 here.  Functions remain in rgl, but they check whether they can
 requireNamespace(rglwidgets), and give instructions if not.  DONE
 here, not committed in rgl yet.
 
+rglwidget should get a "close" argument, to close the current
+rgl window, so all those rgl.close calls aren't needed.
+WONT DO.  KISS.
+
+playwidget should pass ... to createWidget, and take the
+controls in an explicit arg.  DONE
+
+rglwidget doesn't need the height and width args. NOT DONE, it does need them for convertScene.
+
+Drop rglcontroller(), always use playwidget(). DONE
+
+Style the controls using CSS, not Javascript. DONE.
+Renamed (in Javascript) rglwidget to rglWebGL for consistency with writeWebGL,
+playwidget to rglPlayer for namespace reasons.
+
+Do away with subst(), use tags.  Can't completely do away with it,
+we need to write Javascript sometimes, but we can make less use of it, especially as we emphasize controls over setters.
+
+
+Planes should be rendered in Javascript.  Note that "offsets" is
+used both for the plane offsets and internal offsets -- change internals to vOffsets. DONE
 
 NOT DONE:
 
@@ -43,14 +63,17 @@ Get rmarkdown to do the base64 conversion of embedded images
 instead of doing it ourselves; make sure files get cleaned up.
 
 Put bboxdeco rendering into Javascript.  -- looks really time
-consuming.
+consuming, but is necessary, as bboxdeco objects change their appearance
+depending on the subscene they are displayed in.  The alternative would
+be to get scene3d() to generate new bboxdeco objects for each
+subscene.
 
 Investigate whether grid displays can be converted to rgl objects.
 
 Add class to rgl function results so that in RStudio they can automatically
-be made into widgets.
+be made into widgets and displayed.
 
-Do away with subst(), use tags.  Can't completely do away with it,
-we need to write Javascript sometimes, but we can make less use of it.
+Get rid of old style Javascript insertion of controls, always use
+widget.
 
-Style the controls using CSS, not Javascript.
+Maybe depth_test = "lequal" should be the default?  Or figure out why "less" messes up the display.
